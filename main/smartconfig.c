@@ -35,18 +35,32 @@ void smartconfig_example_task(void * parm);
 
 static esp_err_t event_handler(void *ctx, system_event_t *event)
 {
+	wifi_config_t config;
+
 	ESP_LOGI(TAG, "event recv:%d\n",event->event_id);
+
     switch(event->event_id) {
     case SYSTEM_EVENT_STA_START:
-        xTaskCreate(smartconfig_example_task, "smartconfig_example_task", 4096, NULL, 3, NULL);
+    	ESP_ERROR_CHECK( esp_wifi_get_config (ESP_IF_WIFI_STA, &config) );
+    	ESP_LOGI(TAG, "wifi name: %s, password: %s", config.sta.ssid, config.sta.password);
+    	if((strlen((char *)config.sta.ssid)==0)||(strlen((char *)config.sta.password)==0)){
+    		//若获取wifi配置失败，则打开smartconfig
+			xTaskCreate(smartconfig_example_task, "smartconfig_example_task", 4096, NULL, 3, NULL);
+		}
+    	else{
+    		ESP_ERROR_CHECK( esp_wifi_connect() );//若获取wifi配置成功，则连接
+    	}
         break;
+
     case SYSTEM_EVENT_STA_GOT_IP:
         xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
         break;
+
     case SYSTEM_EVENT_STA_DISCONNECTED:
         esp_wifi_connect();
         xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
         break;
+
     default:
         break;
     }
@@ -63,6 +77,7 @@ static void initialise_wifi(void)
 
     ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
     ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
+
     ESP_ERROR_CHECK( esp_wifi_start() );
 }
 
