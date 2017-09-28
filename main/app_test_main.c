@@ -6,6 +6,19 @@
 
 #define TAG "app"
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 void app_main()
 {
     // Initialize NVS.
@@ -16,6 +29,6 @@ void app_main()
     }
     ESP_ERROR_CHECK( ret );
 
-	smartconfig_main();
+    wifi_station_main();
 }
 
