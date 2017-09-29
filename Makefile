@@ -3,7 +3,7 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := smart_config
+PROJECT_NAME := tcp_client
 
 include $(IDF_PATH)/make/project.mk
 

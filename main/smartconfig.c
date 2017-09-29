@@ -45,7 +45,7 @@ static void sc_callback(smartconfig_status_t status, void *pdata)
             ESP_LOGI(TAG, "SSID:%s", wifi_config->sta.ssid);
             ESP_LOGI(TAG, "PASSWORD:%s", wifi_config->sta.password);
             if(p_sc_cb){
-            	p_sc_cb(SC_EVT_LINK, &wifi_config);
+            	p_sc_cb(SC_EVT_LINK, wifi_config);
             }
             break;
         case SC_STATUS_LINK_OVER:
@@ -66,6 +66,7 @@ static void sc_callback(smartconfig_status_t status, void *pdata)
 
 void smartconfig_stop(void){
 	esp_smartconfig_stop();
+	p_sc_cb = NULL;
 }
 
 void smartconfig_restart(void){

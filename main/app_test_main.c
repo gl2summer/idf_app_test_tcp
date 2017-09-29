@@ -1,8 +1,9 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
-#include "smartconfig.h"
 #include "esp_wifi.h"
+#include "smartconfig.h"
+#include "wifi_station.h"
 
 #define TAG "app"
 

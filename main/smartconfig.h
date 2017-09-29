@@ -9,7 +9,7 @@ typedef enum{
 }SC_EVENT;
 
 
-typedef void (*smartconfig_cb_t)(SC_EVENT sc_evt, void *p_data);
+typedef bool (*smartconfig_cb_t)(SC_EVENT sc_evt, void *p_data);
 
 
 void smartconfig_stop(void);
