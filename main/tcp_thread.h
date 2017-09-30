@@ -48,9 +48,9 @@ typedef struct{
 
 int tcpthread_put(tcp_data_t data);
 int tcpthread_get(tcp_data_t *data);
+void tcpthread_reconnect(void);
 void tcpthread_close(void);
 void tcpthread_open(char *ip, int port, tcp_thread_cb_t cb);
-
 
 
 

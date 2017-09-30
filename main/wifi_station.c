@@ -44,6 +44,7 @@ static bool tcpthread_evt_cb(TCP_EVT evt, void *p_data){
 
 		case TCP_TRY_CONNECT_FAILED:
 			ESP_LOGI(TAG, "tcp try connect failed");
+			tcpthread_reconnect();
 		break;
 
 		case TCP_CONNECTED:
@@ -144,7 +145,7 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
         xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
     	ESP_LOGI(TAG, "got ip:%s\n", ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
 
-		tcpthread_open("192.168.0.100", 12345,tcpthread_evt_cb);
+		tcpthread_open("192.168.0.100", 12345, tcpthread_evt_cb);
         break;
 
     case SYSTEM_EVENT_STA_DISCONNECTED:

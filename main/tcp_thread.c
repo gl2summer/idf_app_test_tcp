@@ -29,17 +29,19 @@ step3:
 
 #include <errno.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/socket.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_err.h"
 
 #include "tcp_thread.h"
 
 
-#define TAG "tcp_thread:"
+#define TAG "tcp_thread"
 
 tcp_thread_cb_t tcp_cb = NULL;
 char target_ip_str[16+1]={0};
@@ -53,7 +55,10 @@ static struct sockaddr_in client_addr;
 static unsigned int socklen = sizeof(client_addr);
 static int connect_socket = -1;
 
+static SemaphoreHandle_t xConnSemaphore = NULL;
+static TaskHandle_t pth_tcp_conn_task = NULL;
 
+static SemaphoreHandle_t xRecvSemaphore = NULL;
 static TaskHandle_t pth_recv_data_task = NULL;
 static tcp_data_t recv_buff;
 
@@ -103,11 +108,11 @@ int check_working_socket()
 
 static void close_socket()
 {
-	if(connect_socket){
+	if(connect_socket >= 0){
 		close(connect_socket);
 		connect_socket = -1;
 	}
-	if(server_socket){
+	if(server_socket >= 0){
 		close(server_socket);
 		server_socket = -1;
 	}
@@ -178,6 +183,28 @@ static esp_err_t create_tcp_client()
     }
     ESP_LOGI(TAG, "connect to server success %d!", connect_socket);
 
+
+//	int keepAlive = 1;//设定KeepAlive
+//	int keepIdle = 5;//开始首次KeepAlive探测前的TCP空闭时间
+//	int keepInterval = 5;//两次KeepAlive探测间的时间间隔
+//	int keepCount = 3;//判定断开前的KeepAlive探测次数
+//	if(setsockopt(connect_socket,SOL_SOCKET,SO_KEEPALIVE,(void*)&keepAlive,sizeof(keepAlive)) == -1)
+//	{
+//	    ESP_LOGE(TAG, "setsockopt SO_KEEPALIVE error!/n");
+//	}
+//	if(setsockopt(connect_socket,SOL_TCP,TCP_KEEPIDLE,(void *)&keepIdle,sizeof(keepIdle)) == -1)
+//	{
+//	    ESP_LOGE(TAG, "setsockopt TCP_KEEPIDLE error!/n");
+//	}
+//	if(setsockopt(connect_socket,SOL_TCP,TCP_KEEPINTVL,(void *)&keepInterval,sizeof(keepInterval)) == -1)
+//	{
+//	    ESP_LOGE(TAG, "setsockopt TCP_KEEPINTVL error!/n");
+//	}
+//	if(setsockopt(connect_socket,SOL_TCP,TCP_KEEPCNT,(void *)&keepCount,sizeof(keepCount)) == -1)
+//	{
+//	    ESP_LOGE(TAG, "setsockopt TCP_KEEPCNT error!/n");
+//	}
+
     return ESP_OK;
 }
 
@@ -211,16 +238,17 @@ static void recv_data_task(void *pvParameters)
     					memset(recv_buff.data, 0, sizeof(recv_buff.data));
     				}
     			}
-    		} else {
-    				if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
-    				show_socket_error_reason(connect_socket);
-    			}
+    		}
+    		else {
+				if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
+					show_socket_error_reason(connect_socket);
+				}
     			vTaskDelay(100 / portTICK_RATE_MS);
     		}
     	}
     	else{
     		ESP_LOGI(TAG, "not connect yet!");
-    		vTaskDelay(1000 / portTICK_RATE_MS);
+    		vTaskSuspend(NULL);
     	}
     }
 }
@@ -230,40 +258,44 @@ static void tcp_conn_task(void *pvParameters)
     ESP_LOGI(TAG, "task tcp_conn.");
     /*create tcp socket*/
     int socket_ret;
-    
-#if EXAMPLE_ESP_TCP_MODE_SERVER
-    ESP_LOGI(TAG, "tcp_server will start after 3s...");
-    vTaskDelay(3000 / portTICK_RATE_MS);
-    ESP_LOGI(TAG, "create_tcp_server.");
-    socket_ret = create_tcp_server();
+    while(1){
 
-#else /*EXAMPLE_ESP_TCP_MODE_SERVER*/
-    ESP_LOGI(TAG, "tcp_client will start after 10s...");
-    vTaskDelay(10000 / portTICK_RATE_MS);
-    ESP_LOGI(TAG, "create_tcp_client.");
-    socket_ret = create_tcp_client();
-#endif
-    if(socket_ret == ESP_FAIL) {
-    	ESP_LOGI(TAG, "create tcp socket error,stop.");
-		vTaskDelete(NULL);
-		if(tcp_cb){
-			tcp_cb(TCP_TRY_CONNECT_FAILED, NULL);
+    	if(xSemaphoreTake( xConnSemaphore, portMAX_DELAY ) != pdTRUE)
+    		continue;
+
+	#if EXAMPLE_ESP_TCP_MODE_SERVER
+		ESP_LOGI(TAG, "tcp_server will start after 3s...");
+		vTaskDelay(3000 / portTICK_RATE_MS);
+		ESP_LOGI(TAG, "create_tcp_server.");
+		socket_ret = create_tcp_server();
+
+	#else /*EXAMPLE_ESP_TCP_MODE_SERVER*/
+		ESP_LOGI(TAG, "tcp_client will start after 10s...");
+		vTaskDelay(10000 / portTICK_RATE_MS);
+		ESP_LOGI(TAG, "create_tcp_client.");
+		socket_ret = create_tcp_client();
+	#endif
+		if(socket_ret == ESP_FAIL) {
+			ESP_LOGI(TAG, "create tcp socket error,stop.");
+			if(tcp_cb){
+				tcp_cb(TCP_TRY_CONNECT_FAILED, NULL);
+			}
+		}
+		else{
+
+			if(tcp_cb){
+				tcp_cb(TCP_CONNECTED, NULL);
+			}
+
+			if(pth_recv_data_task==NULL){
+				xTaskCreate(&recv_data_task, "recv_data_task", 4096, NULL, 4, &pth_recv_data_task);
+			}
+			else{
+				vTaskResume(pth_recv_data_task);
+			}
+
 		}
     }
-
-	if(tcp_cb){
-		tcp_cb(TCP_CONNECTED, NULL);
-	}
-
-	xTaskCreate(&recv_data_task, "recv_data_task", 4096, NULL, 4, &pth_recv_data_task);
-
-	/*
-	while(1){
-		if(tcp_cb){
-			tcp_cb(TCP_DISCONNECTED, NULL);
-		}
-	}*/
-    vTaskDelete(NULL);
 }
 
 
@@ -279,23 +311,46 @@ int tcpthread_get(tcp_data_t *data){
 
 	data->len = recv_buff.len;
 	memcpy(data->data, recv_buff.data, sizeof(recv_buff.data));
+	recv_buff.len = 0;
 	return data->len;
+}
+
+void tcpthread_reconnect(void){
+	close_socket();
+
+	if(pth_tcp_conn_task==NULL){
+		xTaskCreate(&tcp_conn_task, "tcp_conn_task", 4096, NULL, 5, &pth_tcp_conn_task);
+	}
+
+	if(xConnSemaphore!=NULL)
+		xSemaphoreGive(xConnSemaphore);
 }
 
 
 void tcpthread_close(void){
 	close_socket();
+
+	memset(target_ip_str, 0, sizeof(target_ip_str));
+	target_port = -1;
 	tcp_cb = NULL;
 }
 
+void tcpthread_open(char *ip, int port, tcp_thread_cb_t cb){
 
-void tcpthread_open(char *ip, int port, tcp_thread_cb_t cb)
-{
-	tcp_cb = cb;
 	if(ip){
 		strcpy(target_ip_str, ip);
 	}
 	target_port = port;
+	tcp_cb = cb;
 
-    xTaskCreate(&tcp_conn_task, "tcp_conn_task", 4096, NULL, 5, NULL);
+	if(xConnSemaphore==NULL){
+		xConnSemaphore = xSemaphoreCreateBinary();
+	}
+	if(xRecvSemaphore==NULL){
+		xRecvSemaphore = xSemaphoreCreateBinary();
+	}
+
+	tcpthread_reconnect();
 }
+
+
