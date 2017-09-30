@@ -36,6 +36,7 @@ static const int ESPTOUCH_DONE_BIT = BIT1;
 static const char *TAG = "sta";
 
 uint8_t phone_ip[4] = { 0 };
+bool bBoot_reset = false;
 
 
 static bool tcpthread_evt_cb(TCP_EVT evt, void *p_data){
@@ -126,10 +127,13 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
 
     case SYSTEM_EVENT_STA_START:
     	ESP_ERROR_CHECK( esp_wifi_get_config (ESP_IF_WIFI_STA, &config) );
+    	if(bBoot_reset){
+    		memset(config.sta.ssid, 0, sizeof(config.sta.ssid));
+    		memset(config.sta.password, 0, sizeof(config.sta.password));
+    		ESP_ERROR_CHECK( esp_wifi_set_config (ESP_IF_WIFI_STA, &config) );
+    		ESP_LOGI(TAG, "reset wifi config");
+    	}
     	ESP_LOGI(TAG, "wifi name: %s, password: %s", config.sta.ssid, config.sta.password);
-
-    	//smartconfig_start(smartconfig_evt_cb);
-    	//break;
 
     	if((strlen((char *)config.sta.ssid)==0)||(strlen((char *)config.sta.password)==0)){
     		//若获取wifi配置失败，则打开smartconfig
@@ -174,8 +178,9 @@ static void initialise_wifi(void)
     ESP_ERROR_CHECK( esp_wifi_start() );
 }
 
-void wifi_station_main()
+void wifi_station_main(bool clean)
 {
     initialise_wifi();
+    bBoot_reset = clean;
 }
 

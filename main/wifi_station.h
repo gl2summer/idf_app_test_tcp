@@ -15,7 +15,7 @@
 
 
 
-void wifi_station_main();
+void wifi_station_main(bool clean);
 
 
 #endif //_WIFI_STATION_H__

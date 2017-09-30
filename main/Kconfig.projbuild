@@ -1,5 +1,11 @@
 menu "Example Configuration"
 
+config RESET_WIFI_GPIO
+	int "Reset wifi station config pin"
+	default 5
+	help
+		Connect this pin with GND to reset wifi station config, when system reboot.
+
 #choice 
 #   prompt "TCP_PERF_MODE "
 #	default MODE_TCP_SHIELDBOX

@@ -4,11 +4,12 @@
 #include "esp_wifi.h"
 #include "smartconfig.h"
 #include "wifi_station.h"
+#include "driver/gpio.h"
 
 #define TAG "app"
 
 
-
+#define RESET_WIFI_GPIO CONFIG_RESET_WIFI_GPIO
 
 
 
@@ -30,6 +31,14 @@ void app_main()
     }
     ESP_ERROR_CHECK( ret );
 
-    wifi_station_main();
+    int delay = 10;
+    gpio_pad_select_gpio(RESET_WIFI_GPIO);
+    gpio_set_pull_mode(RESET_WIFI_GPIO, GPIO_PULLUP_ONLY);
+    gpio_set_direction(RESET_WIFI_GPIO, GPIO_MODE_INPUT);
+    while((gpio_get_level(RESET_WIFI_GPIO)==0)&&(--delay)){
+    	ets_delay_us(10000);
+    }
+
+    wifi_station_main(delay==0);
 }
 
